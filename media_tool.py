@@ -23,7 +23,8 @@ APP_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
 EXE = ".exe" if os.name == "nt" else ""
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 VIDEO_TYPES = [
-    ("Video / audio files", "*.mp4 *.mkv *.avi *.mov *.webm *.flv *.wmv *.m4v *.ts *.mpg *.mpeg *.3gp *.mp3 *.m4a *.wav *.flac"),
+    ("Video / audio files",
+     "*.mp4 *.mkv *.avi *.mov *.webm *.flv *.wmv *.m4v *.ts *.mpg *.mpeg *.3gp *.mp3 *.m4a *.wav *.flac"),
     ("All files", "*.*"),
 ]
 
@@ -82,34 +83,71 @@ def unique_path(base, ext):
     return path
 
 
+def fmt_bytes(b):
+    """Human-readable file size string."""
+    try:
+        b = float(b)
+    except (TypeError, ValueError):
+        return "? MB"
+    for unit in ("B", "KB", "MB", "GB"):
+        if b < 1024:
+            return f"{b:.1f} {unit}"
+        b /= 1024
+    return f"{b:.1f} TB"
+
+
+def fmt_eta(secs):
+    """Human-readable ETA string."""
+    try:
+        secs = int(float(secs))
+    except (TypeError, ValueError):
+        return "?:??"
+    if secs < 0:
+        return "?:??"
+    m, s = divmod(secs, 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
 # ----------------------------------------------------------------- presets
-X264 = ["-c:v", "libx264", "-preset", "medium", "-crf", "20",
-        "-pix_fmt", "yuv420p", "-profile:v", "high"]
-X265 = ["-c:v", "libx265", "-preset", "medium", "-crf", "23",
-        "-pix_fmt", "yuv420p", "-tag:v", "hvc1"]
-AAC = ["-c:a", "aac", "-b:a", "192k"]
+def make_x264(preset="medium"):
+    return ["-c:v", "libx264", "-preset", preset, "-crf", "20",
+            "-pix_fmt", "yuv420p", "-profile:v", "high"]
+
+
+def make_x265(preset="medium"):
+    return ["-c:v", "libx265", "-preset", preset, "-crf", "23",
+            "-pix_fmt", "yuv420p", "-tag:v", "hvc1"]
+
+
+AAC_HQ = ["-c:a", "aac", "-b:a", "192k"]
+AAC_LQ = ["-c:a", "aac", "-b:a", "128k"]
 MAP_AV = ["-map", "0:v:0", "-map", "0:a?"]
 
-# name -> (extension, ffmpeg args)
+# name -> (extension, callable(preset) -> args)
 CONVERT = {
-    "MP4  (H.264)":            ("mp4",  MAP_AV + X264 + AAC + ["-movflags", "+faststart"]),
-    "MP4  (H.265 / HEVC)":     ("mp4",  MAP_AV + X265 + AAC + ["-movflags", "+faststart"]),
-    "MKV  (H.264, keeps subtitles)": ("mkv", MAP_AV + ["-map", "0:s?"] + X264 + AAC + ["-c:s", "copy"]),
-    "MKV  (H.265, keeps subtitles)": ("mkv", MAP_AV + ["-map", "0:s?"] + X265 + AAC + ["-c:s", "copy"]),
-    "WEBM (VP9)":              ("webm", MAP_AV + ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0",
-                                                  "-c:a", "libopus", "-b:a", "128k"]),
-    "AVI  (MPEG-4)":           ("avi",  MAP_AV + ["-c:v", "mpeg4", "-q:v", "4",
-                                                  "-c:a", "libmp3lame", "-q:a", "4"]),
-    "MP3  (audio only)":       ("mp3",  ["-vn", "-c:a", "libmp3lame", "-q:a", "2"]),
-    "M4A  (audio only, AAC)":  ("m4a",  ["-vn", "-c:a", "aac", "-b:a", "192k"]),
-    "WAV  (audio only)":       ("wav",  ["-vn", "-c:a", "pcm_s16le"]),
-    "FLAC (audio only)":       ("flac", ["-vn", "-c:a", "flac"]),
+    "MP4  (H.264)":                  ("mp4",  lambda p: MAP_AV + make_x264(p) + AAC_HQ + ["-movflags", "+faststart"]),
+    "MP4  (H.265 / HEVC)":           ("mp4",  lambda p: MAP_AV + make_x265(p) + AAC_HQ + ["-movflags", "+faststart"]),
+    "MKV  (H.264, keeps subtitles)": ("mkv",  lambda p: MAP_AV + ["-map", "0:s?"] + make_x264(p) + AAC_HQ + ["-c:s", "copy"]),
+    "MKV  (H.265, keeps subtitles)": ("mkv",  lambda p: MAP_AV + ["-map", "0:s?"] + make_x265(p) + AAC_HQ + ["-c:s", "copy"]),
+    "WEBM (VP9)":                    ("webm", lambda p: MAP_AV + ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0",
+                                                                   "-c:a", "libopus", "-b:a", "128k"]),
+    "AVI  (MPEG-4)":                 ("avi",  lambda p: MAP_AV + ["-c:v", "mpeg4", "-q:v", "4",
+                                                                   "-c:a", "libmp3lame", "-q:a", "4"]),
+    "MP3  (audio only)":             ("mp3",  lambda p: ["-vn", "-c:a", "libmp3lame", "-q:a", "2"]),
+    "M4A  (audio only, AAC)":        ("m4a",  lambda p: ["-vn", "-c:a", "aac", "-b:a", "192k"]),
+    "WAV  (audio only)":             ("wav",  lambda p: ["-vn", "-c:a", "pcm_s16le"]),
+    "FLAC (audio only)":             ("flac", lambda p: ["-vn", "-c:a", "flac"]),
 }
-FIRST_PRESET = "MP4  (H.264)"  # gets the quick "no re-encode" shortcut when possible
+FIRST_PRESET = "MP4  (H.264)"
 
 COMPRESS_LEVELS = ["Light  (best quality)", "Medium (balanced)", "Strong (smallest size)"]
 COMPRESS_CODECS = ["H.264 (plays everywhere)", "H.265 (smaller, device must support it)"]
 COMPRESS_RES = ["Keep original", "1080p", "720p", "480p"]
+SPEED_OPTIONS = ["Ultrafast (fastest, bigger file)", "Fast", "Normal (balanced)", "Slow (smallest, best quality)"]
+SPEED_PRESETS = ["ultrafast", "fast", "medium", "slow"]
 CRF_H264 = [22, 26, 30]
 CRF_H265 = [25, 29, 33]
 
@@ -121,8 +159,9 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title("Media Tool")
-        root.geometry("760x720")
-        root.minsize(680, 640)
+        root.geometry("760x760")
+        root.minsize(680, 680)
+        root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.q = queue.Queue()
         self.busy = False
@@ -131,6 +170,27 @@ class App:
 
         self.build_ui()
         self.root.after(100, self.pump)
+
+    # ------------------------------------------------------ close handler
+    def on_close(self):
+        if self.busy:
+            answer = messagebox.askyesno(
+                "Kaam chal raha hai",
+                "Download ya Convert abhi chal raha hai.\n\n"
+                "Band karne se ek incomplete file reh sakti hai.\n\n"
+                "Phir bhi band karo?",
+                icon="warning",
+            )
+            if not answer:
+                return
+            # kill the child process before destroying the window
+            self.stop_flag = True
+            if self.proc and self.proc.poll() is None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+        self.root.destroy()
 
     # ------------------------------------------------------------------ UI
     def build_ui(self):
@@ -153,24 +213,33 @@ class App:
         self.build_convert_tab()
         self.build_compress_tab()
 
-        # bottom: progress + log
+        # bottom: info bar + progress + stop + log
         bottom = ttk.Frame(self.root, padding=(8, 0, 8, 8))
         bottom.pack(fill="both")
+
+        # info bar (MB / speed / ETA)
+        self.info_var = tk.StringVar(value="")
+        self.info_lbl = ttk.Label(bottom, textvariable=self.info_var,
+                                  foreground="#555", font=("", 9))
+        self.info_lbl.pack(anchor="w")
+
         row = ttk.Frame(bottom)
-        row.pack(fill="x")
+        row.pack(fill="x", pady=(2, 0))
         self.bar = ttk.Progressbar(row, maximum=100)
         self.bar.pack(side="left", fill="x", expand=True)
         self.stop_btn = ttk.Button(row, text="Stop", command=self.stop, state="disabled")
         self.stop_btn.pack(side="left", padx=(8, 0))
+
         self.status = tk.StringVar(value="Ready")
         ttk.Label(bottom, textvariable=self.status).pack(anchor="w", pady=(4, 2))
-        self.log = tk.Text(bottom, height=9, wrap="word", state="disabled")
+
+        self.log = tk.Text(bottom, height=8, wrap="word", state="disabled")
         self.log.pack(fill="both")
 
     def build_file_list(self, parent):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        box = tk.Listbox(frame, selectmode="extended", height=7)
+        box = tk.Listbox(frame, selectmode="extended", height=6)
         sb = ttk.Scrollbar(frame, command=box.yview)
         box.configure(yscrollcommand=sb.set)
         box.pack(side="left", fill="both", expand=True)
@@ -202,7 +271,8 @@ class App:
         row = ttk.Frame(t)
         row.pack(fill="x")
         ttk.Button(row, text="Load links.txt", command=self.load_links).pack(side="left")
-        ttk.Button(row, text="Clear", command=lambda: self.url_text.delete("1.0", "end")).pack(side="left", padx=6)
+        ttk.Button(row, text="Clear",
+                   command=lambda: self.url_text.delete("1.0", "end")).pack(side="left", padx=6)
 
         opts = ttk.LabelFrame(t, text="Options", padding=8)
         opts.pack(fill="x", pady=10)
@@ -211,7 +281,8 @@ class App:
         r1 = ttk.Frame(opts)
         r1.pack(fill="x")
         ttk.Radiobutton(r1, text="Video", variable=self.dl_mode, value="video").pack(side="left")
-        ttk.Radiobutton(r1, text="Audio only (MP3)", variable=self.dl_mode, value="audio").pack(side="left", padx=12)
+        ttk.Radiobutton(r1, text="Audio only (MP3)",
+                        variable=self.dl_mode, value="audio").pack(side="left", padx=12)
 
         r2 = ttk.Frame(opts)
         r2.pack(fill="x", pady=6)
@@ -241,13 +312,20 @@ class App:
         self.conv_files = self.build_file_list(t)
 
         row = ttk.Frame(t)
-        row.pack(fill="x", pady=6)
+        row.pack(fill="x", pady=(6, 2))
         ttk.Label(row, text="Convert to:").pack(side="left")
         self.conv_fmt = ttk.Combobox(row, values=list(CONVERT), state="readonly", width=32)
         self.conv_fmt.current(0)
         self.conv_fmt.pack(side="left", padx=6)
 
-        ttk.Label(t, text="The converted file is saved in the same folder as the original.",
+        row2 = ttk.Frame(t)
+        row2.pack(fill="x", pady=(0, 4))
+        ttk.Label(row2, text="Encoding speed:").pack(side="left")
+        self.conv_speed = ttk.Combobox(row2, values=SPEED_OPTIONS, state="readonly", width=34)
+        self.conv_speed.current(2)   # Normal
+        self.conv_speed.pack(side="left", padx=6)
+
+        ttk.Label(t, text="Converted file is saved in the same folder as the original (with _converted suffix).",
                   foreground="gray").pack(anchor="w")
         ttk.Button(t, text="Convert", command=self.start_convert).pack(pady=10, ipadx=20, ipady=4)
 
@@ -258,22 +336,28 @@ class App:
 
         grid = ttk.Frame(t)
         grid.pack(fill="x", pady=6)
+
         ttk.Label(grid, text="Compression:").grid(row=0, column=0, sticky="w", pady=2)
-        self.comp_level = ttk.Combobox(grid, values=COMPRESS_LEVELS, state="readonly", width=34)
+        self.comp_level = ttk.Combobox(grid, values=COMPRESS_LEVELS, state="readonly", width=36)
         self.comp_level.current(1)
         self.comp_level.grid(row=0, column=1, padx=6)
 
         ttk.Label(grid, text="Codec:").grid(row=1, column=0, sticky="w", pady=2)
-        self.comp_codec = ttk.Combobox(grid, values=COMPRESS_CODECS, state="readonly", width=34)
+        self.comp_codec = ttk.Combobox(grid, values=COMPRESS_CODECS, state="readonly", width=36)
         self.comp_codec.current(0)
         self.comp_codec.grid(row=1, column=1, padx=6)
 
         ttk.Label(grid, text="Resolution:").grid(row=2, column=0, sticky="w", pady=2)
-        self.comp_res = ttk.Combobox(grid, values=COMPRESS_RES, state="readonly", width=34)
+        self.comp_res = ttk.Combobox(grid, values=COMPRESS_RES, state="readonly", width=36)
         self.comp_res.current(0)
         self.comp_res.grid(row=2, column=1, padx=6)
 
-        ttk.Label(t, text='Output is saved next to the original as "name_compressed.mp4".',
+        ttk.Label(grid, text="Encoding speed:").grid(row=3, column=0, sticky="w", pady=2)
+        self.comp_speed = ttk.Combobox(grid, values=SPEED_OPTIONS, state="readonly", width=36)
+        self.comp_speed.current(2)   # Normal
+        self.comp_speed.grid(row=3, column=1, padx=6)
+
+        ttk.Label(t, text='Output saved next to original as "name_compressed.mp4".',
                   foreground="gray").pack(anchor="w")
         ttk.Button(t, text="Compress", command=self.start_compress).pack(pady=10, ipadx=20, ipady=4)
 
@@ -286,7 +370,8 @@ class App:
     def load_links(self):
         default = os.path.join(APP_DIR, "links.txt")
         path = default if os.path.isfile(default) else filedialog.askopenfilename(
-            title="Choose links.txt", filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+            title="Choose links.txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
         if not path:
             return
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -314,6 +399,8 @@ class App:
                     self.log.configure(state="disabled")
                 elif kind == "status":
                     self.status.set(val)
+                elif kind == "info":
+                    self.info_var.set(val)
                 elif kind == "prog":
                     self.bar["value"] = val
                 elif kind == "done":
@@ -325,22 +412,24 @@ class App:
 
     def start_job(self, target, *args):
         if self.busy:
-            messagebox.showinfo("Busy", "Another job is running. Wait for it or press Stop.")
+            messagebox.showinfo("Busy", "Ek kaam chal raha hai. Pehle Stop dabao ya khatam hone do.")
             return
         self.busy = True
         self.stop_flag = False
         self.bar["value"] = 0
+        self.info_var.set("")
         self.stop_btn.configure(state="normal")
         threading.Thread(target=self.guard, args=(target, args), daemon=True).start()
 
     def guard(self, target, args):
         try:
             target(*args)
-        except Exception as e:  # show errors instead of dying silently
+        except Exception as e:
             self.say(f"ERROR: {e}")
             self.q.put(("status", "Failed"))
         finally:
             self.q.put(("done", None))
+            self.q.put(("info", ""))
 
     def stream(self, cmd, on_line):
         self.proc = subprocess.Popen(
@@ -393,15 +482,26 @@ class App:
             cmd += ["-f", fmt, "--merge-output-format", "mp4"]
 
         cmd += urls
-        pct = re.compile(r"\[download\]\s+([\d.]+)%")
+
+        # regex patterns for yt-dlp progress lines
+        # Example: [download]  47.3% of   234.50MiB at    2.30MiB/s ETA 01:23
+        pct_re = re.compile(r"\[download\]\s+([\d.]+)%\s+of\s+([\d.]+\s*\S+)\s+at\s+([\d.]+\s*\S+/s)\s+ETA\s+(\S+)")
+        pct_simple = re.compile(r"\[download\]\s+([\d.]+)%")
 
         def on_line(line):
-            m = pct.search(line)
+            m = pct_re.search(line)
             if m:
-                self.q.put(("prog", float(m.group(1))))
+                pct, size, speed, eta = m.group(1), m.group(2), m.group(3), m.group(4)
+                self.q.put(("prog", float(pct)))
+                self.q.put(("info", f"📥  {pct}%  |  Size: {size}  |  Speed: {speed}  |  ETA: {eta}"))
                 self.q.put(("status", line.replace("[download]", "").strip()))
-            elif line.strip():
-                self.say(line)
+            else:
+                ms = pct_simple.search(line)
+                if ms:
+                    self.q.put(("prog", float(ms.group(1))))
+                    self.q.put(("status", line.replace("[download]", "").strip()))
+                elif line.strip():
+                    self.say(line)
 
         self.q.put(("status", "Starting download..."))
         code = self.stream(cmd, on_line)
@@ -409,7 +509,7 @@ class App:
             self.q.put(("status", "Stopped"))
         elif code == 0:
             self.q.put(("prog", 100))
-            self.q.put(("status", f"Done. Saved in {folder}"))
+            self.q.put(("status", f"Done. Saved in: {folder}"))
         else:
             self.q.put(("status", "Finished with errors (see log)"))
 
@@ -417,24 +517,26 @@ class App:
     def start_convert(self):
         files = list(self.conv_files.get(0, "end"))
         if not files:
-            messagebox.showwarning("No file", "Choose at least one file first.")
+            messagebox.showwarning("No file", "Pehle file choose karo.")
             return
         if not find_tool("ffmpeg"):
             messagebox.showerror("ffmpeg not found",
                                  "Put ffmpeg.exe (and ffprobe.exe) next to this script or add them to PATH.")
             return
         name = self.conv_fmt.get()
-        ext, args = CONVERT[name]
+        ext, args_fn = CONVERT[name]
+        preset = SPEED_PRESETS[self.conv_speed.current()]
+        args = args_fn(preset)
         jobs = []
         for src in files:
             base = os.path.splitext(src)[0] + "_converted"
-            jobs.append((src, unique_path(base, ext), args, name == FIRST_PRESET))
+            jobs.append((src, unique_path(base, ext), args, name == FIRST_PRESET, preset))
         self.start_job(self.run_jobs, jobs)
 
     def start_compress(self):
         files = list(self.comp_files.get(0, "end"))
         if not files:
-            messagebox.showwarning("No file", "Choose at least one file first.")
+            messagebox.showwarning("No file", "Pehle file choose karo.")
             return
         if not find_tool("ffmpeg"):
             messagebox.showerror("ffmpeg not found",
@@ -442,17 +544,20 @@ class App:
             return
         level = self.comp_level.current()
         h265 = self.comp_codec.current() == 1
+        preset = SPEED_PRESETS[self.comp_speed.current()]
         crf = (CRF_H265 if h265 else CRF_H264)[level]
-        args = MAP_AV + ["-c:v", "libx265" if h265 else "libx264", "-preset", "medium",
-                         "-crf", str(crf), "-pix_fmt", "yuv420p"]
+
+        args = MAP_AV + ["-c:v", "libx265" if h265 else "libx264",
+                         "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p"]
         if h265:
             args += ["-tag:v", "hvc1"]
         res = self.comp_res.get()
         if res != "Keep original":
             h = res.rstrip("p")
-            args += ["-vf", f"scale=-2:min({h}\\,ih)"]  # never upscale
-        args += ["-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]
-        jobs = [(src, unique_path(os.path.splitext(src)[0] + "_compressed", "mp4"), args, False)
+            args += ["-vf", f"scale=-2:min({h}\\,ih)"]
+        args += AAC_LQ + ["-movflags", "+faststart"]
+
+        jobs = [(src, unique_path(os.path.splitext(src)[0] + "_compressed", "mp4"), args, False, preset)
                 for src in files]
         self.start_job(self.run_jobs, jobs)
 
@@ -460,31 +565,61 @@ class App:
         ffmpeg = find_tool("ffmpeg")
         total = len(jobs)
         ok = 0
-        for i, (src, out, args, allow_copy) in enumerate(jobs):
+
+        # ffmpeg -progress pipe:1 emits key=value lines
+        # out_time_us=<microseconds>   total_size=<bytes>   speed=<Nx>
+        time_re = re.compile(r"out_time_(?:ms|us)=(\d+)")
+        size_re = re.compile(r"total_size=(\d+)")
+        speed_re = re.compile(r"speed=([\d.]+)x")
+
+        for i, (src, out, args, allow_copy, preset) in enumerate(jobs):
             if self.stop_flag:
                 break
+
             info = probe(src)
             use_args = args
-            if allow_copy and info["vcodec"] == "h264" and info["pix_fmt"] == "yuv420p":
-                use_args = MAP_AV + ["-c:v", "copy"] + AAC + ["-movflags", "+faststart"]
-                self.say("Video is already H.264 8-bit, so only repacking (fast).")
-            name = os.path.basename(src)
-            self.q.put(("status", f"[{i + 1}/{total}] {name}"))
-            self.say(f"-> {os.path.basename(out)}")
 
-            cmd = [ffmpeg, "-hide_banner", "-loglevel", "warning", "-n", "-i", src] + use_args + \
-                  ["-progress", "pipe:1", "-nostats", out]
+            if allow_copy and info["vcodec"] == "h264" and info["pix_fmt"] == "yuv420p":
+                use_args = MAP_AV + ["-c:v", "copy"] + AAC_HQ + ["-movflags", "+faststart"]
+                self.say("Video already H.264 8-bit → repacking only (will finish fast).")
+
+            fname = os.path.basename(src)
+            self.q.put(("status", f"[{i + 1}/{total}]  {fname}  |  preset: {preset}"))
+            self.say(f"→ {os.path.basename(out)}")
+
+            cmd = ([ffmpeg, "-hide_banner", "-loglevel", "warning", "-n", "-i", src]
+                   + use_args
+                   + ["-progress", "pipe:1", "-nostats", out])
             dur = info["duration"]
 
-            def on_line(line, i=i):
-                m = re.match(r"out_time_(?:ms|us)=(\d+)", line)
-                if m and dur:
-                    frac = min(int(m.group(1)) / 1e6 / dur, 1.0)
+            # state captured per-job via closure
+            job_state = {"cur_size": 0, "cur_speed": ""}
+
+            def on_line(line, i=i, dur=dur, state=job_state):
+                tm = time_re.match(line)
+                sm = size_re.match(line)
+                spm = speed_re.match(line)
+
+                if tm and dur:
+                    elapsed_s = int(tm.group(1)) / 1e6
+                    frac = min(elapsed_s / dur, 1.0)
                     self.q.put(("prog", (i + frac) / total * 100))
+                    # build info string
+                    size_str = fmt_bytes(state["cur_size"]) if state["cur_size"] else "..."
+                    speed_str = state["cur_speed"] or "..."
+                    eta_s = ((dur - elapsed_s) / float(speed_str.rstrip("x"))) if speed_str else -1
+                    eta_str = fmt_eta(eta_s) if speed_str else "?:??"
+                    pct_str = f"{frac * 100:.1f}%"
+                    self.q.put(("info", f"⚙️  {pct_str}  |  Written: {size_str}  |  Speed: {speed_str}  |  ETA: {eta_str}"))
+                elif sm:
+                    state["cur_size"] = int(sm.group(1))
+                elif spm:
+                    state["cur_speed"] = spm.group(1) + "x"
                 elif line.strip() and not re.match(r"^\w+=", line):
                     self.say(line)
 
             code = self.stream(cmd, on_line)
+
             if self.stop_flag:
                 if os.path.exists(out):
                     try:
@@ -494,11 +629,15 @@ class App:
                 break
             if code == 0:
                 ok += 1
-                self.say(f"Done: {out}")
+                out_size = fmt_bytes(os.path.getsize(out)) if os.path.exists(out) else "?"
+                self.say(f"Done: {os.path.basename(out)}  ({out_size})")
             else:
-                self.say(f"FAILED: {name}")
-        self.q.put(("prog", 100 if ok == total else self.bar["value"]))
-        self.q.put(("status", "Stopped" if self.stop_flag else f"Finished: {ok}/{total} file(s) done"))
+                self.say(f"FAILED: {fname}")
+
+        final_pct = 100 if ok == total else self.bar["value"]
+        self.q.put(("prog", final_pct))
+        self.q.put(("status",
+                    "Stopped" if self.stop_flag else f"Finished: {ok}/{total} file(s) done"))
 
 
 def main():
