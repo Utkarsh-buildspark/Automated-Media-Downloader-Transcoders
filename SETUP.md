@@ -1,96 +1,106 @@
-# ⚙️ Media Tool – Setup Guide
+# Media Tool - Setup Guide
+
+Step-by-step instructions to run Media Tool on Windows.
 
 ---
 
-## ✅ Requirements
+## Requirements
 
 - Windows 10 / 11
-- Python 3.8 or above → [Download here](https://www.python.org/downloads/)
+- Python 3.8 or above ([download](https://www.python.org/downloads/)). During installation, tick "Add Python to PATH". Keep the "tcl/tk" option enabled so tkinter is available.
 - yt-dlp
-- FFmpeg + FFprobe
+- ffmpeg and ffprobe
 
 ---
 
-## 📦 Step 1 — Install Python Dependency
+## Step 1: Download the project
+
+```bash
+git clone https://github.com/utkarsh-buildspark/Media-Tool.git
+cd Media-Tool
+```
+
+Or download the ZIP from GitHub and extract it.
+
+---
+
+## Step 2: Install yt-dlp
+
+Either install with pip:
 
 ```bash
 pip install yt-dlp
 ```
 
----
-
-## 📥 Step 2 — Download FFmpeg
-
-1. Go to [https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)
-2. Download the Windows build (recommended: **gyan.dev** full build)
-3. Extract the zip
-4. Copy `ffmpeg.exe` and `ffprobe.exe` from the `bin` folder
-5. Paste them into the **same folder as `media_tool.py`**
+Or download `yt-dlp.exe` from [github.com/yt-dlp/yt-dlp/releases](https://github.com/yt-dlp/yt-dlp/releases) and place it in the same folder as `media_tool.py`.
 
 ---
 
-## 📥 Step 3 — Download yt-dlp (optional — already installed via pip)
+## Step 3: Install ffmpeg and ffprobe
 
-If you want a standalone `.exe` instead:
+Option A, with winget:
 
-1. Go to [https://github.com/yt-dlp/yt-dlp/releases](https://github.com/yt-dlp/yt-dlp/releases)
-2. Download `yt-dlp.exe`
-3. Place it in the **same folder as `media_tool.py`**
-
----
-
-## 📁 Final Folder Structure
-
-```
-Media-Tool/
-├── media_tool.py
-├── ffmpeg.exe
-├── ffprobe.exe
-├── yt-dlp.exe       (optional if installed via pip)
-└── downloads/       (auto-created on first download)
+```bash
+winget install Gyan.FFmpeg
 ```
 
+Option B, manually:
+
+1. Download a Windows build from [ffmpeg.org/download.html](https://ffmpeg.org/download.html)
+2. Extract the archive
+3. Copy `ffmpeg.exe` and `ffprobe.exe` from the `bin` folder
+4. Paste them next to `media_tool.py`
+
+The app looks for tools in this order: script folder, current folder, system PATH.
+
 ---
 
-## ▶️ Step 4 — Run the App
+## Step 4: Run the app
 
 ```bash
 python media_tool.py
 ```
 
-The GUI window will open with three tabs: YouTube Download, Video Convert, and Video Compress.
+---
+
+## How to use
+
+### Download: YouTube
+1. Paste one or more links, one per line
+2. Choose Video or Audio only (MP3)
+3. Choose a quality (default 1080p)
+4. Optionally set an output filename and a save folder
+5. Click Download
+
+### Download: Other sites
+1. Paste links from any site yt-dlp supports
+2. Choose a media type: Video, Audio, Image/thumbnail, GIF, or Everything
+3. Click Download
+
+### Convert: Video Convert
+1. Click Choose files and select one or more videos
+2. Pick an output format and encoding speed
+3. Click Convert. The result is saved next to the original with a `_converted` suffix.
+
+### Convert: Video Compress
+1. Select files
+2. Choose compression level, codec, resolution and encoding speed
+3. Click Compress. The result is saved as `name_compressed.mp4`.
+
+### Interface modes
+- UI Mode shows progress, speed and ETA inside the window
+- CMD Mode opens a real console window with the raw tool output
+
+### Update Tools
+Click Update Tools to update yt-dlp in a console window.
 
 ---
 
-## 🎯 How to Use
-
-### YouTube Download
-1. Paste one or more YouTube links (one per line)
-2. Select Video or Audio only (MP3)
-3. Choose quality (default: 1080p)
-4. Enable "Prefer H.264" for TV playback compatibility
-5. Set download folder
-6. Click **Download**
-
-### Video Convert
-1. Click **Choose files** and select your video(s)
-2. Pick output format from the dropdown (e.g. MP4 H.264, MKV, MP3)
-3. Click **Convert**
-4. Output is saved next to the original file
-
-### Video Compress
-1. Click **Choose files** and select your video(s)
-2. Choose compression level, codec, and resolution
-3. Click **Compress**
-4. Output is saved as `filename_compressed.mp4`
-
----
-
-## ❌ Common Errors & Fixes
+## Common errors and fixes
 
 | Error | Fix |
 |---|---|
-| `ffmpeg not found` | Place `ffmpeg.exe` and `ffprobe.exe` in the same folder as the script |
-| `yt-dlp not found` | Run `pip install yt-dlp` or place `yt-dlp.exe` in the folder |
-| Download fails at 1080p | Enable "Prefer H.264" option or lower quality |
-| `No module named tkinter` | Reinstall Python and check "tcl/tk" option during setup |
+| yt-dlp not found | Run `pip install yt-dlp` or place `yt-dlp.exe` next to the script |
+| ffmpeg not found | Place `ffmpeg.exe` and `ffprobe.exe` next to the script, or add them to PATH |
+| `No module named tkinter` | Reinstall Python and keep the tcl/tk option enabled |
+| 1080p download fails | Lower the quality, or run Update Tools to get the latest yt-dlp |
