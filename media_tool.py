@@ -4,7 +4,7 @@ Media Tool
   * Download : YouTube (video / playlist / audio) and any other site supported by yt-dlp
   * Convert  : convert local video files to other formats, or compress them (ffmpeg)
   * Interface: UI Mode (progress shown in this window) or CMD Mode (real console window)
-  * Update   : one-click update of yt-dlp and ffmpeg
+  * Update   : one-click update of yt-dlp
 
 yt-dlp and ffmpeg/ffprobe are searched first in the same folder as this script,
 then in the current folder, then in the system PATH.
@@ -246,7 +246,7 @@ def resolve_ffmpeg_args(args, allow_copy, info):
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("Automated Media Downloader & Transcoder — Made by Utkarsh")
+        root.title("Media Tool — Made by Utkarsh")
         root.update_idletasks()
         sw = root.winfo_screenwidth()
         sh = root.winfo_screenheight()
@@ -365,7 +365,7 @@ class App:
         footer.pack(fill="x")
         ttk.Label(footer, text="Built by Utkarsh  ·  © 2026",
                   font=("", 10, "bold"), foreground="#1a6fcc").pack(side="right")
-        ttk.Label(footer, text="Automated Media Downloader & Transcoder — Made by Utkarsh",
+        ttk.Label(footer, text="Media Tool — Made by Utkarsh",
                   font=("", 9), foreground="#555").pack(side="left")
 
     def build_file_list(self, parent):
@@ -683,7 +683,20 @@ class App:
     # ------------------------------------------------------------ download
     @staticmethod
     def read_urls(widget):
-        return [u.strip() for u in widget.get("1.0", "end").splitlines() if u.strip()]
+        """Find every link in the box: works for one per line, or several on one line
+        separated by spaces, commas, semicolons or run together."""
+        text = widget.get("1.0", "end")
+        # a new link starts wherever http:// or https:// appears
+        parts = re.split(r"(?=https?://)", text)
+        urls = []
+        for part in parts:
+            m = re.match(r"https?://[^\s,;\"'<>]+", part)
+            if m and m.group(0) not in urls:
+                urls.append(m.group(0))
+        if urls:
+            return urls
+        # fallback: no http(s) found (e.g. "www.site.com/x"), split on whitespace/commas
+        return [u for u in re.split(r"[\s,;]+", text) if u]
 
     def download_folder(self):
         folder = self.dl_folder.get().strip() or os.path.join(APP_DIR, "downloads")
